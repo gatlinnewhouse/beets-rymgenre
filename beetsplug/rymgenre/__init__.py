@@ -1,6 +1,8 @@
 import logging
 import os
+import re
 import requests
+import urllib
 import yaml
 
 from beets.plugins import BeetsPlugin
@@ -12,6 +14,8 @@ from lxml import html
 log = logging.getLogger('beets')
 
 GENRES_TREE = os.path.join(os.path.dirname(__file__), 'genres-tree.yaml')
+
+GENRE_VOTES_REGEX = re.compile('<a title="\[Genre\d*\]" class="genre" href="/genre/[^/]*/">([^<]*)</a>.*?voted for: \((\d*)\)', re.DOTALL)
 
 class RymGenrePlugin(BeetsPlugin):
     headers = {
@@ -52,6 +56,9 @@ class RymGenrePlugin(BeetsPlugin):
 
         self.parent_genres = defaultdict(set)
         build_parents(yaml.load(open(GENRES_TREE, 'r')), [], self.parent_genres)
+
+        if self.config['user_cookie']:
+            self.headers['Cookie'] = 'ulv=%s' % self.config['user_cookie']
 
     def _get_albums(self, album):
         search_results = requests.post(
@@ -99,21 +106,29 @@ class RymGenrePlugin(BeetsPlugin):
             if fmt:
                 release_information['format'] = fmt[0].strip()
 
+            rymid = release_element.xpath('.//a[@class="searchpage"]/@title')
+            if rymid:
+                release_information['rymid'] = rymid[0][6:-1] # rymid[0] has format '[Album(\d*)]'
+
             return release_information
 
         return [build_release(release_element) for release_element in
                 html.fromstring(search_results.text).xpath('//tr[@class="infobox"]')]
 
-    def _get_genres(self, release_url):
-        release_page = html.fromstring(requests.get(release_url, headers = self.headers).text)
+    def _get_genres(self, release):
+        release_page = html.fromstring(requests.get(release['href'], headers = self.headers).text)
         primary_genres = release_page.xpath('//span[@class="release_pri_genres"]//a[@class="genre"]/text()')
-        secondary_genres = release_page.xpath('//span[@class="release_sec_genres"]//a[@class="genre"]/text()')
 
-        classes = self.config['classes'].as_choice(('primary', 'all'))
+        classes = self.config['classes'].as_choice(('single', 'primary', 'all'))
         depth = self.config['depth'].as_choice(('node', 'all'))
 
         genres = set(primary_genres)
-        if classes == 'all':
+        if classes == 'single' and len(primary_genres) > 1:
+            vote_rymid_path = release_page.xpath('.//a[@class="genre_vote_btn"]/@href')
+            vote_rymid = re.compile('/rgenre/set\?album_id=(\d*)').findall(vote_rymid_path[0])[0]
+            genres = self._get_most_voted_genre(vote_rymid)
+        elif classes == 'all':
+            secondary_genres = release_page.xpath('//span[@class="release_sec_genres"]//a[@class="genre"]/text()')
             genres |= set(secondary_genres)
 
         if depth == 'all':
@@ -121,6 +136,20 @@ class RymGenrePlugin(BeetsPlugin):
                 genres |= self.parent_genres[genre]
 
         return genres
+
+    def _get_most_voted_genre(self, rymid): 
+        action = 'RefreshGenre2|{0}|{1}|l|g'.format(self.config['user_cookie'], rymid)
+
+        genres_res = requests.get(
+            'http://rateyourmusic.com/go/process?%s' % urllib.urlencode({'action': action}),
+            headers = self.headers).text
+
+        primary_res = genres_res.split('document.getElementById')[1]
+        primary_parsed = GENRE_VOTES_REGEX.findall(primary_res)
+        # print primary_parsed
+
+        best_genre = max(primary_parsed, key = lambda p: int(p[1]))[0]
+        return set([best_genre])
 
     def _get_best_release(self, albums, beets_album):
         def value_or_na(value):
@@ -168,7 +197,7 @@ class RymGenrePlugin(BeetsPlugin):
     def _get_genre(self, album):
         release = self._get_best_release(self._get_albums(album), album)
         if release:
-            genres = self._get_genres(release['href'])
+            genres = self._get_genres(release)
 
             log.info(u'genres for album {0} - {1}: {2}'.format(
                 album.albumartist,
