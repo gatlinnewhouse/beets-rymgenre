@@ -28,7 +28,7 @@ class RymGenrePlugin(BeetsPlugin):
         super(RymGenrePlugin, self).__init__()
 
         self.config.add({
-            'separator': u', ',
+            'separator': ', ',
             'classes': 'all',
             'depth': 'all'
         })
@@ -41,7 +41,7 @@ class RymGenrePlugin(BeetsPlugin):
                 path = []
 
             if isinstance(elem, dict):
-                for (k, v) in elem.items():
+                for (k, v) in list(elem.items()):
                     parents[k] |= set(path)
                     build_parents(v, [k] + path, parents)
             elif isinstance(elem, list):
@@ -127,7 +127,7 @@ class RymGenrePlugin(BeetsPlugin):
             return value if value is not None else 'N/A'
 
         def format_rym_album(album):
-            return u'{0} - {1} ({2}, {3}, {4})'.format(
+            return '{0} - {1} ({2}, {3}, {4})'.format(
                 value_or_na(album['artist']),
                 value_or_na(album['album']),
                 value_or_na(album['format']),
@@ -138,12 +138,12 @@ class RymGenrePlugin(BeetsPlugin):
             url = ui.input_('Enter rateyourmusic url:')
             return { 'href': url }
 
-        print(u'\nFetching genre for album:\n    {0} - {1}'.format(
-            beets_album.albumartist, beets_album.album))
+        print(('\nFetching genre for album:\n    {0} - {1}'.format(
+            beets_album.albumartist, beets_album.album)))
 
-        print(u'URL:\n    %s' % albums[0]['href'])
+        print(('URL:\n    %s' % albums[0]['href']))
 
-        print(format_rym_album(albums[0]))
+        print((format_rym_album(albums[0])))
         res = ui.input_options(['apply', 'more candidates', 'set url', 'skip'])
         if res == 'a':
             return albums[0]
@@ -153,10 +153,10 @@ class RymGenrePlugin(BeetsPlugin):
             return None
         else:
             id = 1
-            print(u'Candidates for {0} - {1} ({2}):'.format(
-                beets_album.albumartist, beets_album.album, beets_album.year))
+            print(('Candidates for {0} - {1} ({2}):'.format(
+                beets_album.albumartist, beets_album.album, beets_album.year)))
             for album in albums:
-                print(str(id) + u'. ' + format_rym_album(album))
+                print((str(id) + '. ' + format_rym_album(album)))
                 id += 1
             res = ui.input_options(['set url', 'skip'], numrange=(1, len(albums)))
             if res == 's':
@@ -170,12 +170,12 @@ class RymGenrePlugin(BeetsPlugin):
         if release:
             genres = self._get_genres(release['href'])
 
-            log.info(u'genres for album {0} - {1}: {2}'.format(
+            log.info('genres for album {0} - {1}: {2}'.format(
                 album.albumartist,
                 album.album,
-                self.config['separator'].get(unicode).join(genres)))
+                self.config['separator'].get(str).join(genres)))
 
-            return self.config['separator'].get(unicode).join(genres)
+            return self.config['separator'].get(str).join(genres)
         return None
 
     def commands(self):
@@ -189,7 +189,7 @@ class RymGenrePlugin(BeetsPlugin):
                     album.genre = genres
                     album.store()
 
-                    for item in album.items():
+                    for item in list(album.items()):
                         item.genre = genres
                         item.store()
 
