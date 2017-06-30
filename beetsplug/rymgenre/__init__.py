@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import requests
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import yaml
 
 from beets.plugins import BeetsPlugin
@@ -141,7 +141,7 @@ class RymGenrePlugin(BeetsPlugin):
         action = 'RefreshGenre2|{0}|{1}|l|g'.format(self.config['user_cookie'], rymid)
 
         genres_res = requests.get(
-            'http://rateyourmusic.com/go/process?%s' % urllib.urlencode({'action': action}),
+            'http://rateyourmusic.com/go/process?%s' % urllib.parse.urlencode({'action': action}),
             headers = self.headers).text
 
         primary_res = genres_res.split('document.getElementById')[1]
